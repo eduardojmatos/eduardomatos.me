@@ -297,7 +297,6 @@
             minutes = normalizedInput.minute || 0,
             seconds = normalizedInput.second || 0,
             milliseconds = normalizedInput.millisecond || 0;
-
         // store reference to input for deterministic cloning
         this._input = duration;
 
@@ -1503,7 +1502,6 @@
 
         if (moment.isMoment(input)) {
             config = extend({}, input);
-
             config._d = new Date(+input._d);
         } else if (format) {
             if (isArray(format)) {

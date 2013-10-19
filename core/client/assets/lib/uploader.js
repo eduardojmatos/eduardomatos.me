@@ -188,6 +188,7 @@
                     $dropzone.find('div.description').hide();
                     $dropzone.find('.js-fileupload').removeClass('right');
                     $dropzone.find('.js-url').remove();
+                    $dropzone.find('button.centre').remove();
                     if (val === "") {
                         $dropzone.trigger("uploadsuccess", 'http://');
                         self.initWithDropzone();

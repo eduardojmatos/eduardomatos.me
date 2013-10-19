@@ -78,7 +78,7 @@
         },
 
         //TODO: This has to be moved to the I18n localization file.
-        //This structure is supposed to be close to the i18n-localization which will be used soon. 
+        //This structure is supposed to be close to the i18n-localization which will be used soon.
         messageMap: {
             errors: {
                 post: {
