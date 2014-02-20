@@ -14,23 +14,10 @@ function GhostMailer(opts) {
 
 // ## E-mail transport setup
 // *This promise should always resolve to avoid halting Ghost::init*.
-<<<<<<< HEAD
 GhostMailer.prototype.init = function () {
     var self = this;
     if (config().mail && config().mail.transport) {
         this.createTransport();
-=======
-GhostMailer.prototype.init = function (ghost) {
-    this.ghost = ghost;
-    // TODO: fix circular reference ghost -> mail -> api -> ghost, remove this late require
-    this.api = require('./api');
-
-    var self = this,
-        config = ghost.config();
-
-    if (config.mail && config.mail.transport && config.mail.options) {
-        this.createTransport(config);
->>>>>>> Initial commit
         return when.resolve();
     }
 
