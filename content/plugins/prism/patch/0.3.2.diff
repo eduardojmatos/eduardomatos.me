@@ -1,0 +1,29 @@
+diff -ur a/core/ghost.js b/core/ghost.js
+--- a/core/ghost.js	2013-10-11 22:36:24.000000000 +0200
++++ b/core/ghost.js	2013-10-17 18:46:40.000000000 +0200
+@@ -337,12 +337,12 @@
+         });
+     });
+ 
+-    callback(args);
++    return callback(args);
+ };
+ 
+ // Initialise plugins.  Will load from config.activePlugins by default
+ Ghost.prototype.initPlugins = function (pluginsToLoad) {
+-    pluginsToLoad = pluginsToLoad || models.Settings.activePlugins;
++    pluginsToLoad = pluginsToLoad || instance.config().activePlugins || [];
+     var self = this;
+ 
+     return plugins.init(this, pluginsToLoad).then(function (loadedPlugins) {
+diff -ur a/core/server.js b/core/server.js
+--- a/core/server.js	2013-10-11 22:36:24.000000000 +0200
++++ b/core/server.js	2013-10-17 17:45:27.000000000 +0200
+@@ -21,6 +21,7 @@
+     loading = when.defer(),
+     server = express(),
+     ghost = new Ghost();
++    ghost.server = server;
+ 
+ // ##Custom Middleware
+ 

@@ -337,12 +337,12 @@ Ghost.prototype.doFilter = function (name, args, callback) {
         });
     });
 
-    callback(args);
+    return callback(args);
 };
 
 // Initialise plugins.  Will load from config.activePlugins by default
 Ghost.prototype.initPlugins = function (pluginsToLoad) {
-    pluginsToLoad = pluginsToLoad || models.Settings.activePlugins;
+    pluginsToLoad = pluginsToLoad || instance.config().activePlugins || [];
     var self = this;
 
     return plugins.init(this, pluginsToLoad).then(function (loadedPlugins) {
