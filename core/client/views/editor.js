@@ -1,6 +1,6 @@
 // # Article Editor
 
-/*global window, document, setTimeout, navigator, $, _, Backbone, Ghost, Showdown, CodeMirror, shortcut, Countable, JST */
+/*global window, document, setTimeout, navigator, $, _, Backbone, Ghost, Showdown, CodeMirror, shortcut, Countable */
 (function () {
     "use strict";
 
@@ -449,7 +449,7 @@
         initMarkdown: function () {
             var self = this;
 
-            this.converter = new Showdown.converter({extensions: ['ghostdown', 'github']});
+            this.converter = new Showdown.converter({extensions: ['typography', 'ghostdown', 'github']});
             this.editor = CodeMirror.fromTextArea(document.getElementById('entry-markdown'), {
                 mode: 'gfm',
                 tabMode: 'indent',
@@ -704,7 +704,7 @@
             var value = editor.getValue();
 
             _.each(markerMgr.markers, function (marker, id) {
-                /*jslint unparam:true*/
+                /*jshint unused:false*/
                 value = value.replace(markerMgr.getMarkerRegexForId(id), '');
             });
 
@@ -720,7 +720,7 @@
 
         // initialise
         editor.on('change', function (cm, changeObj) {
-            /*jslint unparam:true*/
+            /*jshint unused:false*/
             var linesChanged = _.range(changeObj.from.line, changeObj.from.line + changeObj.text.length);
 
             _.each(linesChanged, function (ln) {

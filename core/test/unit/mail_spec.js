@@ -167,4 +167,26 @@ describe("Mail", function () {
             done();
         });
     });
+
+    it('should use from address as configured in config.js', function (done) {
+        overrideConfig({mail:{fromaddress: 'static@example.com'}});
+        mailer.fromAddress().should.equal('static@example.com');
+        done();
+    });
+
+    it('should fall back to ghost@[blog.url] as from address', function (done) {
+        // Standard domain
+        overrideConfig({url: 'http://default.com', mail:{fromaddress: null}});
+        mailer.fromAddress().should.equal('ghost@default.com');
+
+        // Trailing slash
+        overrideConfig({url: 'http://default.com/', mail:{}});
+        mailer.fromAddress().should.equal('ghost@default.com');
+
+        // Strip Port
+        overrideConfig({url: 'http://default.com:2368/', mail:{}});
+        mailer.fromAddress().should.equal('ghost@default.com');
+
+        done();
+    });
 });

@@ -13,6 +13,7 @@ results
 
 npm-debug.log
 node_modules
+bower_components
 
 .idea/*
 *.iml
@@ -32,12 +33,8 @@ projectFilesBackup
 
 /core/client/tpl/hbs-tpl.js
 /core/client/assets/css
-.sass-cache/
-/core/client/assets/sass/config.rb
-/core/client/assets/sass/layouts/config.rb
-/core/client/assets/sass/modules/config.rb
-/core/client/assets/sass/modules/bourbon
-/core/client/assets/sass/modules/bourbon/*
+/core/client/assets/fonts
+/core/client/assets/vendor
 /core/server/data/export/exported*
 /docs
 /_site

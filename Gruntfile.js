@@ -8,32 +8,19 @@ var path           = require('path'),
     distDirectory  = path.resolve(process.cwd(), '.dist'),
     configLoader   = require('./core/config-loader.js'),
 
-    buildGlob = [
-        '**',
-        '!docs/**',
-        '!_site/**',
-        '!content/images/**',
-        'content/images/README.md',
-        '!content/themes/**',
-        'content/themes/casper/**',
-        '!content/plugins/**',
-        'content/plugins/README.md',
-        '!node_modules/**',
-        '!core/test/**',
-        '!core/client/assets/sass/**',
-        '!**/*.db*',
-        '!*.db*',
-        '!.sass*',
-        '!.af*',
-        '!.git*',
-        '!.groc*',
-        '!*.iml',
-        '!config.js',
-        '!CONTRIBUTING.md',
-        '!SECURITY.md',
-        '!.travis.yml',
-        '!Gemfile*'
-    ],
+    // ## Build File Patterns
+    // a list of files and paterns to process and exclude when running builds & releases
+    // It is taken from the .npmignore file and all patterns are inverted as the .npmignore
+    // file defines what to ignore, whereas we want to define what to include.
+    buildGlob = (function () {
+        /*jslint stupid:true */
+        return fs.readFileSync('.npmignore', {encoding: 'utf8'}).split('\n').map(function (pattern) {
+            if (pattern[0] === '!') {
+                return pattern.substr(1);
+            }
+            return '!' + pattern;
+        });
+    }()),
 
     configureGrunt = function (grunt) {
 
@@ -63,10 +50,6 @@ var path           = require('path'),
                     files: ['core/client/tpl/**/*.hbs'],
                     tasks: ['handlebars']
                 },
-                sass: {
-                    files: ['<%= paths.adminAssets %>/sass/**/*'],
-                    tasks: ['sass:admin']
-                },
                 concat: {
                     files: [
                         'core/client/*.js',
@@ -83,8 +66,6 @@ var path           = require('path'),
                         'content/themes/casper/css/*.css',
                         // Theme JS
                         'content/themes/casper/js/*.js',
-                        // Admin CSS
-                        '<%= paths.adminAssets %>/css/*.css',
                         // Admin JS
                         'core/built/scripts/*.js'
                     ],
@@ -121,30 +102,39 @@ var path           = require('path'),
                 }
             },
 
-            // Open the site in a browser
-            open: {
+            // ### Config for grunt-contrib-jshint
+            // JSHint all the things!
+            jshint: {
                 server: {
-                    // TODO: Load this port from config?
-                    path: 'http://127.0.0.1:2368'
-                }
-            },
-
-            // JSLint all the things!
-            jslint: {
-                server: {
-                    directives: {
+                    options: {
                         // node environment
                         node: true,
                         // browser environment
                         browser: false,
                         // allow dangling underscores in var names
-                        nomen: true,
-                        // allow to do statements
-                        todo: true,
-                        // allow unused parameters
-                        unparam: true,
+                        nomen: false,
                         // don't require use strict pragma
-                        sloppy: true
+                        strict: false,
+                        sub: true,
+                        eqeqeq: true,
+                        laxbreak: true,
+                        bitwise: true,
+                        curly: true,
+                        forin: true,
+                        immed: true,
+                        latedef: true,
+                        newcap: true,
+                        noarg: true,
+                        noempty: true,
+                        nonew: true,
+                        plusplus: true,
+                        regexp: true,
+                        undef: true,
+                        unused: true,
+                        trailing: true,
+                        indent: 4,
+                        onevar: true,
+                        white: true
                     },
                     files: {
                         src: [
@@ -155,49 +145,89 @@ var path           = require('path'),
                     }
                 },
                 client: {
-                    directives: {
+                    options: {
+                        "predef": {
+                            "document": true,
+                            "window": true,
+                            "location": true,
+                            "setTimeout": true,
+                            "Ember": true,
+                            "Em": true,
+                            "DS": true,
+                            "$": true
+                        },
                         // node environment
                         node: false,
                         // browser environment
                         browser: true,
                         // allow dangling underscores in var names
-                        nomen: true,
-                        // allow to do statements
-                        todo: true,
-                         // allow unused parameters
-                        unparam: true
+                        nomen: false,
+                        bitwise: true,
+                        curly: true,
+                        eqeqeq: true,
+                        forin: true,
+                        immed: true,
+                        latedef: true,
+                        newcap: true,
+                        noarg: true,
+                        noempty: true,
+                        nonew: true,
+                        plusplus: true,
+                        regexp: true,
+                        undef: true,
+                        unused: true,
+                        trailing: true,
+                        indent: 4,
+                        esnext: true,
+                        onevar: true,
+                        white: true
                     },
                     files: {
-                        src: 'core/client/**/*.js'
-                    },
-                    exclude: [
-                        'core/client/assets/vendor/**/*.js',
-                        'core/client/tpl/**/*.js'
-                    ]
+                        src: [
+                            'core/client/**/*.js',
+                            // Ignore files
+                            '!core/client/assets/vendor/**/*.js',
+                            '!core/client/tpl/**/*.js'
+                        ]
+                    }
                 },
                 shared: {
-                    directives: {
+                    options: {
                         // node environment
                         node: true,
                         // browser environment
                         browser: false,
-                        // allow dangling underscores in var names
-                        nomen: true,
-                        // allow to do statements
-                        todo: true,
-                        // allow unused parameters
-                        unparam: true,
                         // don't require use strict pragma
-                        sloppy: true
+                        strict: false,
+                        // allow dangling underscores in var names
+                        nomen: false,
+                        bitwise: true,
+                        curly: true,
+                        eqeqeq: true,
+                        forin: true,
+                        immed: true,
+                        latedef: true,
+                        newcap: true,
+                        noarg: true,
+                        noempty: true,
+                        nonew: true,
+                        plusplus: true,
+                        regexp: true,
+                        undef: true,
+                        unused: true,
+                        trailing: true,
+                        indent: 4,
+                        onevar: true,
+                        white: true
                     },
                     files: {
                         src: [
-                            'core/shared/**/*.js'
+                            'core/shared/**/*.js',
+                            // Ignore files
+                            '!core/shared/vendor/**/*.js',
+                            '!core/shared/lib/**/*.js'
                         ]
-                    },
-                    exclude: [
-                        'core/shared/vendor/**/*.js'
-                    ]
+                    }
                 }
             },
 
@@ -237,29 +267,46 @@ var path           = require('path'),
                         'core/test/unit/**/export_spec.js',
                         'core/test/unit/**/import_spec.js'
                     ]
+                },
+
+                storage: {
+                    src: ['core/test/unit/**/storage*_spec.js']
+                },
+
+                integration: {
+                    src: [
+                        'core/test/integration/**/model*_spec.js',
+                        'core/test/integration/**/api*_spec.js'
+                    ]
+                },
+
+                api: {
+                    src: ['core/test/functional/api/*_test.js']
+                },
+
+                routes: {
+                    src: ['core/test/functional/routes/*_test.js']
                 }
             },
 
-            // Compile all the SASS!
-            sass: {
-                admin: {
-                    files: {
-                        '<%= paths.adminAssets %>/css/screen.css': '<%= paths.adminAssets %>/sass/screen.scss'
-                    }
-                },
-                compress: {
-                    options: {
-                        style: 'compressed'
-                    },
-                    files: {
-                        '<%= paths.adminAssets %>/css/screen.css': '<%= paths.adminAssets %>/sass/screen.scss'
-                    }
-                }
-            },
 
             shell: {
-                bourbon: {
-                    command: 'bourbon install --path <%= paths.adminAssets %>/sass/modules/'
+                bower: {
+                    command: path.resolve(__dirname + '/node_modules/.bin/bower install'),
+                    options: {
+                        stdout: true
+                    }
+                },
+                // generate coverage report
+                coverage: {
+                    command: function () {
+                        // will work on windows only if mocha is globally installed
+                        var cmd = !!process.platform.match(/^win/) ? 'mocha' : './node_modules/mocha/bin/mocha';
+                        return cmd + ' --timeout 15000 --reporter html-cov > coverage.html ./core/test/blanket_coverage.js';
+                    },
+                    execOptions: {
+                        env: 'NODE_ENV=' + process.env.NODE_ENV
+                    }
                 }
             },
 
@@ -309,22 +356,44 @@ var path           = require('path'),
             },
 
             copy: {
-                nightly: {
+                dev: {
                     files: [{
-                        expand: true,
-                        src: buildGlob,
-                        dest: '<%= paths.nightlyBuild %>/<%= pkg.version %>/'
+                        cwd: 'bower_components/jquery/dist/',
+                        src: 'jquery.js',
+                        dest: 'core/built/public/',
+                        expand: true
+                    }, {
+                        cwd: 'bower_components/ghost-ui/dist/',
+                        src: ['**'],
+                        dest: 'core/client/assets/',
+                        expand: true
                     }]
                 },
-                weekly: {
+                prod: {
                     files: [{
-                        expand: true,
-                        src: buildGlob,
-                        dest: '<%= paths.weeklyBuild %>/<%= pkg.version %>/'
+                        cwd: 'bower_components/jquery/dist/',
+                        src: 'jquery.js',
+                        dest: 'core/built/public/',
+                        expand: true
+                    }, {
+                        cwd: 'bower_components/ghost-ui/dist/',
+                        src: ['**'],
+                        dest: 'core/client/assets/',
+                        expand: true
                     }]
                 },
-                build: {
+                release: {
                     files: [{
+                        cwd: 'bower_components/jquery/dist/',
+                        src: 'jquery.js',
+                        dest: 'core/built/public/',
+                        expand: true
+                    }, {
+                        cwd: 'bower_components/ghost-ui/dist/',
+                        src: ['**'],
+                        dest: 'core/client/assets/',
+                        expand: true
+                    }, {
                         expand: true,
                         src: buildGlob,
                         dest: '<%= paths.buildBuild %>/'
@@ -380,35 +449,34 @@ var path           = require('path'),
                 dev: {
                     files: {
                         'core/built/scripts/vendor.js': [
-                            'core/shared/vendor/jquery/jquery.js',
-                            'core/shared/vendor/jquery/jquery-ui-1.10.3.custom.min.js',
+                            'bower_components/jquery/dist/jquery.js',
+                            'bower_components/jquery-ui/ui/jquery-ui.js',
                             'core/client/assets/lib/jquery-utils.js',
                             'core/client/assets/lib/uploader.js',
-                            'core/shared/vendor/underscore.js',
-                            'core/shared/vendor/backbone/backbone.js',
-                            'core/shared/vendor/handlebars/handlebars-runtime.js',
-                            'core/shared/vendor/moment.js',
 
-                            'core/client/assets/vendor/icheck/jquery.icheck.min.js',
+                            'bower_components/lodash/dist/lodash.underscore.js',
+                            'bower_components/backbone/backbone.js',
+                            'bower_components/handlebars/handlebars.runtime.js',
+                            'bower_components/moment/moment.js',
+                            'bower_components/jquery-file-upload/js/jquery.fileupload.js',
+                            'bower_components/codemirror/lib/codemirror.js',
+                            'bower_components/codemirror/addon/mode/overlay.js',
+                            'bower_components/codemirror/mode/markdown/markdown.js',
+                            'bower_components/codemirror/mode/gfm/gfm.js',
+                            'bower_components/showdown/src/showdown.js',
+                            'bower_components/validator-js/validator.js',
 
-                            'core/shared/vendor/jquery/jquery.ui.widget.js',
-                            'core/shared/vendor/jquery/jquery.iframe-transport.js',
-                            'core/shared/vendor/jquery/jquery.fileupload.js',
+                            'core/client/assets/lib/showdown/extensions/ghostdown.js',
+                            'core/shared/lib/showdown/extensions/typography.js',
+                            'core/shared/lib/showdown/extensions/github.js',
 
-                            'core/client/assets/vendor/codemirror/codemirror.js',
-                            'core/client/assets/vendor/codemirror/addon/mode/overlay.js',
-                            'core/client/assets/vendor/codemirror/mode/markdown/markdown.js',
-                            'core/client/assets/vendor/codemirror/mode/gfm/gfm.js',
-                            'core/client/assets/vendor/showdown/showdown.js',
-                            'core/client/assets/vendor/showdown/extensions/ghostdown.js',
-                            'core/shared/vendor/showdown/extensions/github.js',
+                            // ToDo: Remove or replace
                             'core/client/assets/vendor/shortcuts.js',
-                            'core/client/assets/vendor/validator-client.js',
-                            'core/client/assets/vendor/countable.js',
                             'core/client/assets/vendor/to-title-case.js',
-                            'core/client/assets/vendor/packery.pkgd.min.js',
-                            'core/client/assets/vendor/fastclick.js',
-                            'core/client/assets/vendor/nprogress.js'
+
+                            'bower_components/Countable/Countable.js',
+                            'bower_components/fastclick/lib/fastclick.js',
+                            'bower_components/nprogress/nprogress.js'
                         ],
 
                         'core/built/scripts/helpers.js': [
@@ -437,35 +505,34 @@ var path           = require('path'),
                 prod: {
                     files: {
                         'core/built/scripts/ghost.js': [
-                            'core/shared/vendor/jquery/jquery.js',
-                            'core/shared/vendor/jquery/jquery-ui-1.10.3.custom.min.js',
+                            'bower_components/jquery/dist/jquery.js',
+                            'bower_components/jquery-ui/ui/jquery-ui.js',
                             'core/client/assets/lib/jquery-utils.js',
                             'core/client/assets/lib/uploader.js',
-                            'core/shared/vendor/underscore.js',
-                            'core/shared/vendor/backbone/backbone.js',
-                            'core/shared/vendor/handlebars/handlebars-runtime.js',
-                            'core/shared/vendor/moment.js',
 
-                            'core/client/assets/vendor/icheck/jquery.icheck.min.js',
+                            'bower_components/lodash/dist/lodash.underscore.js',
+                            'bower_components/backbone/backbone.js',
+                            'bower_components/handlebars/handlebars.runtime.js',
+                            'bower_components/moment/moment.js',
+                            'bower_components/jquery-file-upload/js/jquery.fileupload.js',
+                            'bower_components/codemirror/lib/codemirror.js',
+                            'bower_components/codemirror/addon/mode/overlay.js',
+                            'bower_components/codemirror/mode/markdown/markdown.js',
+                            'bower_components/codemirror/mode/gfm/gfm.js',
+                            'bower_components/showdown/src/showdown.js',
+                            'bower_components/validator-js/validator.js',
 
-                            'core/shared/vendor/jquery/jquery.ui.widget.js',
-                            'core/shared/vendor/jquery/jquery.iframe-transport.js',
-                            'core/shared/vendor/jquery/jquery.fileupload.js',
+                            'core/client/assets/lib/showdown/extensions/ghostdown.js',
+                            'core/shared/lib/showdown/extensions/typography.js',
+                            'core/shared/lib/showdown/extensions/github.js',
 
-                            'core/client/assets/vendor/codemirror/codemirror.js',
-                            'core/client/assets/vendor/codemirror/addon/mode/overlay.js',
-                            'core/client/assets/vendor/codemirror/mode/markdown/markdown.js',
-                            'core/client/assets/vendor/codemirror/mode/gfm/gfm.js',
-                            'core/client/assets/vendor/showdown/showdown.js',
-                            'core/client/assets/vendor/showdown/extensions/ghostdown.js',
-                            'core/shared/vendor/showdown/extensions/github.js',
+                            // ToDo: Remove or replace
                             'core/client/assets/vendor/shortcuts.js',
-                            'core/client/assets/vendor/validator-client.js',
-                            'core/client/assets/vendor/countable.js',
                             'core/client/assets/vendor/to-title-case.js',
-                            'core/client/assets/vendor/packery.pkgd.min.js',
-                            'core/client/assets/vendor/fastclick.js',
-                            'core/client/assets/vendor/nprogress.js',
+
+                            'bower_components/Countable/Countable.js',
+                            'bower_components/fastclick/lib/fastclick.js',
+                            'bower_components/nprogress/nprogress.js',
 
                             'core/client/init.js',
 
@@ -538,6 +605,7 @@ var path           = require('path'),
                     stdio: 'inherit'
                 }
             }, function (error, result, code) {
+                /*jshint unused:false*/
                 if (error) {
                     grunt.fail.fatal(result.stdout);
                 }
@@ -666,6 +734,7 @@ var path           = require('path'),
                 data.replace(
                     commitRegex,
                     function (wholeCommit, hash, author, email, date, message) {
+                        /*jshint unused:false*/
 
                         // The author name and commit message may have trailing space.
                         author = author.trim();
@@ -776,6 +845,7 @@ var path           = require('path'),
 
                 when.reduce(tags,
                     function (prev, tag, idx) {
+                        /*jshint unused:false*/
                         return when.promise(function (resolve) {
                             processTag(tag, function (releaseData) {
                                 resolve(prev + '\n' + releaseData);
@@ -790,18 +860,15 @@ var path           = require('path'),
             });
         });
 
-        grunt.registerTask('nightly',
-            'Nightly builds\n' +
-            ' - Do our standard build steps (sass, handlebars, etc)\n' +
-            ' - Bump patch version in package.json, commit, tag and push\n' +
+        grunt.registerTask('release',
+            'Release task - creates a final built zip\n' +
+            ' - Do our standard build steps (handlebars, etc)\n' +
             ' - Generate changelog for the past 14 releases\n' +
             ' - Copy files to build-folder/#/#{version} directory\n' +
             ' - Clean out unnecessary files (travis, .git*, .af*, .groc*)\n' +
             ' - Zip files in build folder to dist-folder/#{version} directory',
             [
-                'setCurrentBuildType:Nightly',
-                'shell:bourbon',
-                'sass:compress',
+                'shell:bower',
                 'handlebars',
                 'concat',
                 'uglify',
@@ -853,9 +920,9 @@ var path           = require('path'),
         grunt.registerTask('dev',
             'Dev Mode; watch files and restart server on changes',
             [
-                'sass:admin',
                 'handlebars',
                 'concat',
+                'copy:dev',
                 'express:dev',
                 'open',
                 'watch'
@@ -864,19 +931,34 @@ var path           = require('path'),
         // TODO: Git submodule init/update (https://github.com/jaubourg/grunt-update-submodules)?
         grunt.registerTask('init', 'Prepare the project for development', ['shell:bourbon', 'default']);
 
-        grunt.registerTask('test-unit', 'Run unit tests', ['clean:test', 'setTestEnv', 'loadConfig', 'express:test', 'mochacli:all']);
+        grunt.registerTask('test-functional', 'Run functional interface tests (CasperJS)', ['clean:test', 'setTestEnv', 'loadConfig', 'copy:dev', 'express:test', 'spawn-casperjs', 'express:test:stop']);
 
         grunt.registerTask('test-functional', 'Run casperjs tests only', ['clean:test', 'setTestEnv', 'express:test', 'spawn-casperjs']);
 
-        grunt.registerTask('validate', 'Run tests and lint code', ['jslint', 'test-unit', 'test-functional']);
+        grunt.registerTask('test-routes', 'Run functional route tests (mocha)', ['clean:test', 'setTestEnv', 'loadConfig', 'express:test', 'mochacli:routes', 'express:test:stop']);
+
+        grunt.registerTask('validate', 'Run tests and lint code', ['jshint', 'test-routes', 'test-unit', 'test-api', 'test-integration', 'test-functional']);
+
+
+        // ### Coverage report for Unit and Integration Tests
+
+        grunt.registerTask('test-coverage', 'Generate unit and integration (mocha) tests coverage report', ['clean:test', 'setTestEnv', 'loadConfig', 'shell:coverage']);
+
+
+        // ### Documentation
 
         grunt.registerTask('docs', 'Generate Docs', ['groc']);
 
-        // TODO: Production build task that minifies with uglify:prod
-        grunt.registerTask('prod', ['sass:compress', 'handlebars', 'concat', 'uglify']);
+
+        // ### Tools for building assets
+
+        grunt.registerTask('init', 'Prepare the project for development', ['shell:bower', 'default']);
+
+        // Before running in production mode
+        grunt.registerTask('prod', 'Build JS & templates for production', ['handlebars', 'concat', 'uglify', 'copy:prod']);
 
         // When you just say 'grunt'
-        grunt.registerTask('default', ['sass:compress', 'handlebars', 'concat']);
+        grunt.registerTask('default', 'Build JS & templates for development', ['update_submodules', 'handlebars', 'concat', 'copy:dev']);
     };
 
 module.exports = configureGrunt;
