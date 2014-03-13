@@ -1,3 +1,8 @@
 [submodule "content/themes/casper"]
 	path = content/themes/casper
 	url = git://github.com/TryGhost/Casper.git
+	repository = git@github.com:TryGhost/Casper.git
+[submodule "content/themes/albireo"]
+  path = content/themes/albireo
+  url = git://github.com/santonocito/albireo.git
+  repository = git@github.com:santonocito/albireo.git
