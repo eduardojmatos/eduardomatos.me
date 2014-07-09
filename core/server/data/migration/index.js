@@ -1,127 +1,34 @@
 var _               = require('lodash'),
     when            = require('when'),
-    errors          = require('../../errorHandling'),
+    path            = require('path'),
+    fs              = require('fs'),
+    nodefn          = require('when/node'),
+    errors          = require('../../errors'),
     client          = require('../../models/base').client,
     knex            = require('../../models/base').knex,
     sequence        = require('when/sequence'),
 
-    defaultSettings = require('../default-settings'),
+    versioning      = require('../versioning'),
     Settings        = require('../../models/settings').Settings,
     fixtures        = require('../fixtures'),
     schema          = require('../schema').tables,
+    dataExport      = require('../export'),
+    utils           = require('../utils'),
+    config          = require('../../config'),
 
-    initialVersion  = '000',
     schemaTables    = _.keys(schema),
-    defaultDatabaseVersion,
 
     init,
     reset,
     migrateUp,
-    migrateUpFreshDb,
-    getTables;
-
-// Default Database Version
-// The migration version number according to the hardcoded default settings
-// This is the version the database should be at or migrated to
-function getDefaultDatabaseVersion() {
-    if (!defaultDatabaseVersion) {
-        // This be the current version according to the software
-        defaultDatabaseVersion = _.find(defaultSettings.core, function (setting) {
-            return setting.key === 'databaseVersion';
-        }).defaultValue;
-    }
-
-    return defaultDatabaseVersion;
-}
-
-// Database Current Version
-// The migration version number according to the database
-// This is what the database is currently at and may need to be updated
-function getDatabaseVersion() {
-    return knex.schema.hasTable('settings').then(function (exists) {
-        // Check for the current version from the settings table
-        if (exists) {
-            // Temporary code to deal with old databases with currentVersion settings
-            return knex('settings')
-                .where('key', 'databaseVersion')
-                .orWhere('key', 'currentVersion')
-                .select('value')
-                .then(function (versions) {
-                    var databaseVersion = _.reduce(versions, function (memo, version) {
-                        if (isNaN(version.value)) {
-                            errors.throwError('Database version is not recognised');
-                        }
-                        return parseInt(version.value, 10) > parseInt(memo, 10) ? version.value : memo;
-                    }, initialVersion);
-
-                    if (!databaseVersion || databaseVersion.length === 0) {
-                        // we didn't get a response we understood, assume initialVersion
-                        databaseVersion = initialVersion;
-                    }
-
-                    return databaseVersion;
-                });
-        }
-        throw new Error('Settings table does not exist');
-    });
-}
-
-function setDatabaseVersion() {
-    return knex('settings')
-        .where('key', 'databaseVersion')
-        .update({ 'value': defaultDatabaseVersion });
-}
-
-function createTable(table) {
-    return knex.schema.createTable(table, function (t) {
-        var column,
-            columnKeys = _.keys(schema[table]);
-        _.each(columnKeys, function (key) {
-            // creation distinguishes between text with fieldtype, string with maxlength and all others
-            if (schema[table][key].type === 'text' && schema[table][key].hasOwnProperty('fieldtype')) {
-                column = t[schema[table][key].type](key, schema[table][key].fieldtype);
-            } else if (schema[table][key].type === 'string' && schema[table][key].hasOwnProperty('maxlength')) {
-                column = t[schema[table][key].type](key, schema[table][key].maxlength);
-            } else {
-                column = t[schema[table][key].type](key);
-            }
-
-            if (schema[table][key].hasOwnProperty('nullable') && schema[table][key].nullable === true) {
-                column.nullable();
-            } else {
-                column.notNullable();
-            }
-            if (schema[table][key].hasOwnProperty('primary') && schema[table][key].primary === true) {
-                column.primary();
-            }
-            if (schema[table][key].hasOwnProperty('unique') && schema[table][key].unique) {
-                column.unique();
-            }
-            if (schema[table][key].hasOwnProperty('unsigned') && schema[table][key].unsigned) {
-                column.unsigned();
-            }
-            if (schema[table][key].hasOwnProperty('references') && schema[table][key].hasOwnProperty('inTable')) {
-                //check if table exists?
-                column.references(schema[table][key].references);
-                column.inTable(schema[table][key].inTable);
-            }
-            if (schema[table][key].hasOwnProperty('defaultTo')) {
-                column.defaultTo(schema[table][key].defaultTo);
-            }
-        });
-    });
-}
-
-function deleteTable(table) {
-    return knex.schema.dropTableIfExists(table);
-}
+    migrateUpFreshDb;
 
 function getDeleteCommands(oldTables, newTables) {
     var deleteTables = _.difference(oldTables, newTables);
     if (!_.isEmpty(deleteTables)) {
         return _.map(deleteTables, function (table) {
             return function () {
-                return deleteTable(table);
+                return utils.deleteTable(table);
             };
         });
     }
@@ -132,31 +39,39 @@ function getAddCommands(oldTables, newTables) {
     if (!_.isEmpty(addTables)) {
         return _.map(addTables, function (table) {
             return function () {
-                return createTable(table);
+                return utils.createTable(table);
             };
         });
     }
 }
 
-function getTablesFromSqlite3() {
-    return knex.raw("select * from sqlite_master where type = 'table'").then(function (response) {
-        return _.reject(_.pluck(response[0], 'tbl_name'), function (name) {
-            return name === 'sqlite_sequence';
-        });
+function addColumnCommands(table, columns) {
+    var columnKeys = _.keys(schema[table]),
+        addColumns = _.difference(columnKeys, columns);
+    
+    return _.map(addColumns, function (column) {
+        return function () {
+            utils.addColumn(table, column);
+        };
     });
 }
 
-function getTablesFromPgSQL() {
-    return knex.raw("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'").then(function (response) {
-        return _.flatten(_.pluck(response.rows, 'table_name'));
-    });
-}
-
-function getTablesFromMySQL() {
-    return knex.raw("show tables").then(function (response) {
-        return _.flatten(_.map(response[0], function (entry) {
-            return _.values(entry);
-        }));
+function modifyUniqueCommands(table, indexes) {
+    var columnKeys = _.keys(schema[table]);
+    return _.map(columnKeys, function (column) {
+        if (schema[table][column].unique && schema[table][column].unique === true) {
+            if (!_.contains(indexes, table + '_' + column + '_unique')) {
+                return function () {
+                    return utils.addUnique(table, column);
+                };
+            }
+        } else if (!schema[table][column].unique) {
+            if (_.contains(indexes, table + '_' + column + '_unique')) {
+                return function () {
+                    return utils.dropUnique(table, column);
+                };
+            }
+        }
     });
 }
 
@@ -168,8 +83,8 @@ init = function () {
     // 2. The database exists but is out of date
     // 3. The database exists but the currentVersion setting does not or cannot be understood
     // 4. The database has not yet been created
-    return getDatabaseVersion().then(function (databaseVersion) {
-        var defaultVersion = getDefaultDatabaseVersion();
+    return versioning.getDatabaseVersion().then(function (databaseVersion) {
+        var defaultVersion = versioning.getDefaultDatabaseVersion();
         if (databaseVersion === defaultVersion) {
             // 1. The database exists and is up-to-date
             return when.resolve();
@@ -179,7 +94,7 @@ init = function () {
             // Migrate to latest version
             return self.migrateUp().then(function () {
                 // Finally update the databases current version
-                return setDatabaseVersion();
+                return versioning.setDatabaseVersion();
             });
         }
         if (databaseVersion > defaultVersion) {
@@ -208,7 +123,7 @@ reset = function () {
     var tables = [];
     tables = _.map(schemaTables, function (table) {
         return function () {
-            return deleteTable(table);
+            return utils.deleteTable(table);
         };
     }).reverse();
 
@@ -220,7 +135,7 @@ migrateUpFreshDb = function () {
     var tables = [];
     tables = _.map(schemaTables, function (table) {
         return function () {
-            return createTable(table);
+            return utils.createTable(table);
         };
     });
 
@@ -249,49 +164,82 @@ function checkMySQLPostTable() {
     });
 }
 
+function backupDatabase() {
+    return dataExport().then(function (exportedData) {
+        // Save the exported data to the file system for download
+        var fileName = path.resolve(config().paths.contentPath + '/data/exported-' + (new Date().getTime()) + '.json');
+
+        return nodefn.call(fs.writeFile, fileName, JSON.stringify(exportedData));
+    });
+}
+
 // Migrate from a specific version to the latest
 migrateUp = function () {
-    return getTables().then(function (oldTables) {
-        // if tables exist and lient is mysqls check if posts table is okay
-        if (!_.isEmpty(oldTables) && client === 'mysql') {
-            return checkMySQLPostTable().then(function () {
-                return oldTables;
-            });
-        }
-        return oldTables;
-    }).then(function (oldTables) {
-        var deleteCommands = getDeleteCommands(oldTables, schemaTables),
-            addCommands = getAddCommands(oldTables, schemaTables),
-            commands = [];
+    var deleteCommands,
+        addCommands,
+        oldTables,
+        addColumns = [],
+        modifyUniCommands = [],
+        commands = [];
 
+    return backupDatabase().then(function () {
+        return utils.getTables().then(function (tables) {
+            oldTables = tables;
+        });
+    }).then(function () {
+        // if tables exist and client is mysqls check if posts table is okay
+        if (!_.isEmpty(oldTables) && client === 'mysql') {
+            return checkMySQLPostTable();
+        }
+    }).then(function () {
+        deleteCommands = getDeleteCommands(oldTables, schemaTables);
+        addCommands = getAddCommands(oldTables, schemaTables);
+        return when.all(
+            _.map(oldTables, function (table) {
+                return utils.getIndexes(table).then(function (indexes) {
+                    modifyUniCommands = modifyUniCommands.concat(modifyUniqueCommands(table, indexes));
+                });
+            })
+        );
+    }).then(function () {
+        return when.all(
+            _.map(oldTables, function (table) {
+                return utils.getColumns(table).then(function (columns) {
+                    addColumns = addColumns.concat(addColumnCommands(table, columns));
+                });
+            })
+        );
+
+    }).then(function () {
+        modifyUniCommands = _.compact(modifyUniCommands);
+
+        // delete tables
         if (!_.isEmpty(deleteCommands)) {
             commands = commands.concat(deleteCommands);
         }
+        // add tables
         if (!_.isEmpty(addCommands)) {
             commands = commands.concat(addCommands);
         }
+        // add columns if needed
+        if (!_.isEmpty(addColumns)) {
+            commands = commands.concat(addColumns);
+        }
+        // add/drop unique constraint
+        if (!_.isEmpty(modifyUniCommands)) {
+            commands = commands.concat(modifyUniCommands);
+        }
+        // execute the commands in sequence
         if (!_.isEmpty(commands)) {
             return sequence(commands);
         }
         return;
+    }).then(function () {
+        return fixtures.updateFixtures();
     });
 };
 
-getTables = function () {
-    if (client === 'sqlite3') {
-        return getTablesFromSqlite3();
-    }
-    if (client === 'mysql') {
-        return getTablesFromMySQL();
-    }
-    if (client === 'pg') {
-        return getTablesFromPgSQL();
-    }
-    return when.reject("No support for database client " + client);
-};
-
 module.exports = {
-    getDatabaseVersion: getDatabaseVersion,
     init: init,
     reset: reset,
     migrateUp: migrateUp,

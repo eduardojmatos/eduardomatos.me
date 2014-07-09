@@ -1,7 +1,7 @@
 var _              = require('lodash'),
     when           = require('when'),
-    errors         = require('../errorHandling'),
-    nodefn         = require('when/node/function'),
+    errors         = require('../errors'),
+    nodefn         = require('when/node'),
     bcrypt         = require('bcryptjs'),
     Posts          = require('./post').Posts,
     ghostBookshelf = require('./base'),
@@ -38,7 +38,9 @@ User = ghostBookshelf.Model.extend({
 
     tableName: 'users',
 
-    saving: function () {
+    saving: function (newPage, attr, options) {
+        /*jshint unused:false*/
+
         var self = this;
         // disabling sanitization until we can implement a better version
         // this.set('name', this.sanitize('name'));
@@ -49,14 +51,22 @@ User = ghostBookshelf.Model.extend({
 
         ghostBookshelf.Model.prototype.saving.apply(this, arguments);
 
-        if (!this.get('slug')) {
+        if (this.hasChanged('slug') || !this.get('slug')) {
             // Generating a slug requires a db call to look for conflicting slugs
-            return ghostBookshelf.Model.generateSlug(User, this.get('name'))
+            return ghostBookshelf.Model.generateSlug(User, this.get('slug') || this.get('name'),
+                {transacting: options.transacting})
                 .then(function (slug) {
                     self.set({slug: slug});
                 });
         }
+    },
 
+    toJSON: function (options) {
+        var attrs = ghostBookshelf.Model.prototype.toJSON.call(this, options);
+        // remove password hash for security reasons
+        delete attrs.password;
+
+        return attrs;
     },
 
     posts: function () {
@@ -72,33 +82,94 @@ User = ghostBookshelf.Model.extend({
     }
 
 }, {
+    /**
+    * Returns an array of keys permitted in a method's `options` hash, depending on the current method.
+    * @param {String} methodName The name of the method to check valid options for.
+    * @return {Array} Keys allowed in the `options` hash of the model's method.
+    */
+    permittedOptions: function (methodName) {
+        var options = ghostBookshelf.Model.permittedOptions(),
+
+            // whitelists for the `options` hash argument on methods, by method name.
+            // these are the only options that can be passed to Bookshelf / Knex.
+            validOptions = {
+                findOne: ['withRelated'],
+                findAll: ['withRelated'],
+                add: ['user'],
+                edit: ['user', 'withRelated']
+            };
+
+        if (validOptions[methodName]) {
+            options = options.concat(validOptions[methodName]);
+        }
+
+        return options;
+    },
 
     /**
-     * Naive user add
-     * @param  _user
+     * ### Find All
      *
-     * Hashes the password provided before saving to the database.
+     * @param options
+     * @returns {*}
      */
-    add: function (_user) {
+    findAll:  function (options) {
+        options = options || {};
+        options.withRelated = _.union([ 'roles' ], options.include);
+        return ghostBookshelf.Model.findAll.call(this, options);
+    },
 
+    /**
+     * ### Find One
+     * @extends ghostBookshelf.Model.findOne to include roles
+     * **See:** [ghostBookshelf.Model.findOne](base.js.html#Find%20One)
+     */
+    findOne: function (data, options) {
+        options = options || {};
+        options.withRelated = _.union([ 'roles' ], options.include);
+
+        return ghostBookshelf.Model.findOne.call(this, data, options);
+    },
+
+    /**
+     * ### Edit
+     * @extends ghostBookshelf.Model.edit to handle returning the full object
+     * **See:** [ghostBookshelf.Model.edit](base.js.html#edit)
+     */
+    edit: function (data, options) {
+        options = options || {};
+        options.withRelated = _.union([ 'roles' ], options.include);
+
+        return ghostBookshelf.Model.edit.call(this, data, options);
+    },
+
+    /**
+     * ## Add
+     * Naive user add
+     * Hashes the password provided before saving to the database.
+     *
+     * @param {object} data
+     * @param {object} options
+     * @extends ghostBookshelf.Model.add to manage all aspects of user signup
+     * **See:** [ghostBookshelf.Model.add](base.js.html#Add)
+     */
+    add: function (data, options) {
         var self = this,
             // Clone the _user so we don't expose the hashed password unnecessarily
-            userData = _.extend({}, _user);
+            userData = this.filterData(data);
+
+        options = this.filterOptions(options, 'add');
+        options.withRelated = _.union([ 'roles' ], options.include);
+
         /**
          * This only allows one user to be added to the database, otherwise fails.
-         * @param  {object} user
+         * @param {object} user
          * @author javorszky
          */
         return validatePasswordLength(userData.password).then(function () {
             return self.forge().fetch();
-        }).then(function (user) {
-            // Check if user exists
-            if (user) {
-                return when.reject(new Error('A user is already registered. Only one user for now!'));
-            }
         }).then(function () {
             // Generate a new password hash
-            return generatePasswordHash(_user.password);
+            return generatePasswordHash(data.password);
         }).then(function (hash) {
             // Assign the hashed password
             userData.password = hash;
@@ -106,36 +177,52 @@ User = ghostBookshelf.Model.extend({
             return self.gravatarLookup(userData);
         }).then(function (userData) {
             // Save the user with the hashed password
-            return ghostBookshelf.Model.add.call(self, userData);
+            return ghostBookshelf.Model.add.call(self, userData, options);
         }).then(function (addedUser) {
+
             // Assign the userData to our created user so we can pass it back
             userData = addedUser;
-            // Add this user to the admin role (assumes admin = role_id: 1)
-            return userData.roles().attach(1);
+            if (!data.role) {
+                // TODO: needs change when owner role is introduced and setup is changed
+                data.role = 1;
+            }
+            return userData.roles().attach(data.role);
         }).then(function (addedUserRole) {
             /*jshint unused:false*/
-            // Return the added user as expected
-
-            return when.resolve(userData);
+            // find and return the added user
+            return self.findOne({id: userData.id}, options);
         });
+    },
 
-        /**
-         * Temporarily replacing the function below with another one that checks
-         * whether there's anyone registered at all. This is due to #138
-         * @author  javorszky
-         */
+    permissable: function (userModelOrId, context, loadedPermissions, hasUserPermission, hasAppPermission) {
+        var self = this,
+            userModel = userModelOrId,
+            origArgs;
 
-        // return this.forge({email: userData.email}).fetch().then(function (user) {
-        //     if (user !== null) {
-        //         return when.reject(new Error('A user with that email address already exists.'));
-        //     }
-        //     return nodefn.call(bcrypt.hash, _user.password, null, null).then(function (hash) {
-        //         userData.password = hash;
-        //         ghostBookshelf.Model.add.call(UserRole, userRoles);
-        //         return ghostBookshelf.Model.add.call(User, userData);
-        //     }, errors.logAndThrowError);
-        // }, errors.logAndThrowError);
+        // If we passed in an id instead of a model, get the model
+        // then check the permissions
+        if (_.isNumber(userModelOrId) || _.isString(userModelOrId)) {
+            // Grab the original args without the first one
+            origArgs = _.toArray(arguments).slice(1);
+            // Get the actual post model
+            return this.findOne({id: userModelOrId}).then(function (foundUserModel) {
+                // Build up the original args but substitute with actual model
+                var newArgs = [foundUserModel].concat(origArgs);
 
+                return self.permissable.apply(self, newArgs);
+            }, errors.logAndThrowError);
+        }
+
+        if (userModel) {
+            // If this is the same user that requests the operation allow it.
+            hasUserPermission = hasUserPermission || context.user === userModel.get('id');
+        }
+
+        if (hasUserPermission && hasAppPermission) {
+            return when.resolve();
+        }
+
+        return when.reject();
     },
 
     setWarning: function (user) {
@@ -160,13 +247,15 @@ User = ghostBookshelf.Model.extend({
     },
 
     // Finds the user by email, and checks the password
-    check: function (_userdata) {
+    check: function (object) {
         var self = this,
             s;
-
-        return this.getByEmail(_userdata.email).then(function (user) {
+        return this.getByEmail(object.email).then(function (user) {
+            if (!user || user.get('status') === 'invited') {
+                return when.reject(new Error('NotFound'));
+            }
             if (user.get('status') !== 'locked') {
-                return nodefn.call(bcrypt.compare, _userdata.pw, user.get('password')).then(function (matched) {
+                return nodefn.call(bcrypt.compare, object.password, user.get('password')).then(function (matched) {
                     if (!matched) {
                         return when(self.setWarning(user)).then(function (remaining) {
                             s = (remaining > 1) ? 's' : '';
@@ -175,7 +264,7 @@ User = ghostBookshelf.Model.extend({
                         });
                     }
 
-                    return when(user.set('status', 'active').save()).then(function (user) {
+                    return when(user.set({status : 'active', last_login : new Date()}).save()).then(function (user) {
                         return user;
                     });
                 }, errors.logAndThrowError);
@@ -195,17 +284,12 @@ User = ghostBookshelf.Model.extend({
 
     /**
      * Naive change password method
-     * @param  {object} _userdata email, old pw, new pw, new pw2
-     *
+     * @param {object} _userdata email, old pw, new pw, new pw2
      */
-    changePassword: function (_userdata) {
+    changePassword: function (oldPassword, newPassword, ne2Password, options) {
         var self = this,
-            userid = _userdata.currentUser,
-            oldPassword = _userdata.oldpw,
-            newPassword = _userdata.newpw,
-            ne2Password = _userdata.ne2pw,
+            userid = options.context.user,
             user = null;
-
 
         if (newPassword !== ne2Password) {
             return when.reject(new Error('Your new passwords do not match'));
@@ -225,13 +309,16 @@ User = ghostBookshelf.Model.extend({
             return nodefn.call(bcrypt.hash, newPassword, salt);
         }).then(function (hash) {
             user.save({password: hash});
-
             return user;
         });
     },
 
     generateResetToken: function (email, expires, dbHash) {
         return this.getByEmail(email).then(function (foundUser) {
+            if (!foundUser) {
+                return when.reject(new Error('NotFound'));
+            }
+
             var hash = crypto.createHash('sha256'),
                 text = "";
 
@@ -286,7 +373,7 @@ User = ghostBookshelf.Model.extend({
             var diff = 0,
                 i;
 
-            // check if the token lenght is correct
+            // check if the token length is correct
             if (token.length !== generatedToken.length) {
                 diff = 1;
             }
@@ -326,45 +413,14 @@ User = ghostBookshelf.Model.extend({
             var foundUser = results[0],
                 passwordHash = results[1];
 
-            foundUser.save({password: passwordHash, status: 'active'});
-
-            return foundUser;
+            return foundUser.save({password: passwordHash, status: 'active'});
         });
-    },
-
-    effectivePermissions: function (id) {
-        return this.read({id: id}, { withRelated: ['permissions', 'roles.permissions'] })
-            .then(function (foundUser) {
-                var seenPerms = {},
-                    rolePerms = _.map(foundUser.related('roles').models, function (role) {
-                        return role.related('permissions').models;
-                    }),
-                    allPerms = [];
-
-                rolePerms.push(foundUser.related('permissions').models);
-
-                _.each(rolePerms, function (rolePermGroup) {
-                    _.each(rolePermGroup, function (perm) {
-                        var key = perm.get('action_type') + '-' + perm.get('object_type') + '-' + perm.get('object_id');
-
-                        // Only add perms once
-                        if (seenPerms[key]) {
-                            return;
-                        }
-
-                        allPerms.push(perm);
-                        seenPerms[key] = true;
-                    });
-                });
-
-                return when.resolve(allPerms);
-            }, errors.logAndThrowError);
     },
 
     gravatarLookup: function (userData) {
         var gravatarUrl = '//www.gravatar.com/avatar/' +
-                            crypto.createHash('md5').update(userData.email.toLowerCase().trim()).digest('hex') +
-                            "?d=404",
+                crypto.createHash('md5').update(userData.email.toLowerCase().trim()).digest('hex') +
+                "?d=404",
             checkPromise = when.defer();
 
         http.get('http:' + gravatarUrl, function (res) {
@@ -392,12 +448,9 @@ User = ghostBookshelf.Model.extend({
             var userWithEmail = users.find(function (user) {
                 return user.get('email').toLowerCase() === email.toLowerCase();
             });
-
             if (userWithEmail) {
                 return when.resolve(userWithEmail);
             }
-
-            return when.reject(new Error('NotFound'));
         });
     }
 });
